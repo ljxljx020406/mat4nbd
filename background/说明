@@ -1,0 +1,7 @@
+usnet1: 链路长度为100km
+usnet2: 链路长度为800km，业务100-600bps，500个业务
+usnet3: 链路长度为800km，业务200-650bps，500个业务
+usnet4: 链路长度为800km，业务300-700bps，500个业务
+usnet5: 链路长度为800km，业务400-800bps，300个业务
+
+QPSK与16QAM的SNR门限：800km16QAM的OSNR近26dB，仿真考虑GSNR，但不考虑损耗，所以将GSNR门限提高至26.5dB
