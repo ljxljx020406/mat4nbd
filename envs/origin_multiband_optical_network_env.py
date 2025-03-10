@@ -1,3 +1,5 @@
+import time
+
 import gym
 import numpy as np
 import pickle
@@ -10,10 +12,14 @@ import itertools
 sys.path.append(os.path.abspath('../background'))
 
 from main_functions import release_service, one_link_transmission
+import numba
+from numba import jit, njit, prange
+from concurrent.futures import ThreadPoolExecutor
 
-class frag_MultibandOpticalNetworkEnv(gym.Env):
+
+class MultibandOpticalNetworkEnv(gym.Env):
     def __init__(self, topology, service_dict, service_to_be_sorting):
-        super(frag_MultibandOpticalNetworkEnv, self).__init__()
+        super(MultibandOpticalNetworkEnv, self).__init__()
         # 加载拓扑
         # with open(topology_file, 'rb') as f:
         #     self.topology = pickle.load(f)
@@ -68,6 +74,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
         return self.get_observation()
 
     def get_observation(self):
+        time2 = time.time()
         observation = []
         service_state = []
         # for i in range(len(self.service.path) - 1):
@@ -109,7 +116,11 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
         else:
             service_state.append([1])
 
+        time4 = time.time()
+        print('preprocess:', time4-time2)
         link_SNR = self.cal_link_SNR()
+        time5 = time.time()
+        print('cal_linkSNR:', time5-time4)
         service_state.append(link_SNR.tolist())
         # 展平 service_state 列表
         service_state = list(itertools.chain.from_iterable(service_state))
@@ -117,10 +128,14 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
         service_state = np.array(service_state)
         return observation_array, service_state
 
+
     def cal_link_SNR(self):
         link_SNR = np.zeros(80, dtype=float)
         for j in range(80):
+            time1 = time.time()
             allocation, _, path_GSNR = self.only_check_action(j)
+            time2 = time.time()
+            print('only_check_action:', time2-time1)
             if allocation:
                 link_SNR[j] = np.min(path_GSNR, axis=0)[j]
         return link_SNR
@@ -197,6 +212,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
 
         return allocation, Power, path_GSNR
 
+
     def only_check_action(self, action):
         tmp_topology = copy.deepcopy(self.topology)
         tmp_servicedict = copy.deepcopy(self.service_dict)
@@ -224,101 +240,34 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
                 # 获取链路参数
                 distance = tmp_topology[u][v]['length']
                 channels = 80
-                if i == 0:
-                    Power[i] = copy.deepcopy(tmp_topology[u][v]['wavelength_power'])
-                    Power[i][action] = self.service.power
+                # if i == 0:
+                Power[i] = copy.deepcopy(tmp_topology[u][v]['wavelength_power'])
+                Power[i][action] = self.service.power
 
                 frequencies = np.concatenate(
                     [np.linspace(184.4e12, 190.25e12, channels // 2), np.linspace(190.75e12, 196.6e12, channels // 2)])
 
-                tmp = copy.deepcopy(tmp_topology[u][v]['wavelength_power'])
-                tmp[action] = self.service.power
+                # tmp = copy.deepcopy(tmp_topology[u][v]['wavelength_power'])
+                tmp = copy.deepcopy(Power[i])
+                # tmp[action] = self.service.power
                 tmp = np.array(tmp)
 
-                if i != 0:
-                    Power[i] = [Power[i][j] if Power[i][j] != 0 and tmp[j] != 0 else tmp[j] for j in
-                                range(len(Power[i]))]
-                    tmp = Power[i]
-                    tmp = np.array(tmp)
-
+                # if i != 0:
+                #     Power[i] = [Power[i][j] if Power[i][j] != 0 and tmp[j] != 0 else tmp[j] for j in
+                #                 range(len(Power[i]))]
+                #     tmp = Power[i]
+                #     tmp = np.array(tmp)
+                time1 = time.time()
                 Power_after_transmission, GSNR = one_link_transmission(distance, channels, tmp, frequencies)
+                time2 = time.time()
+                # print(time2-time1)
                 path_GSNR[i] = GSNR
 
                 if self.service.snr_requirement > GSNR[action]:
                     allocation = False
                     reason = "GSNR not satisfied!!"
                     break
-                else:
-                    Power[i + 1] = Power_after_transmission
 
-                    # 检查该业务会不会对其它业务有影响，如有影响，则拒绝
-                    for m in range(80):
-                        if m != action and tmp_topology[u][v]['wavelength_service'][m] != 0:
-                            tmp_service = tmp_servicedict.get(tmp_topology[u][v]['wavelength_service'][m], None)
-                            if tmp_service.snr_requirement >= GSNR[m]:
-                                allocation = False
-                                reason = 'interference!'
-                                outer_break = True
-                                break
-
-        # Power = np.zeros((len(self.service.path), 80), dtype=float)
-        # path_GSNR = np.zeros((len(self.service.path), 80), dtype=float)
-        #
-        # for i in range((len(self.service.path) - 1)):
-        #     if outer_break:
-        #         break
-        #     u = self.service.path[i]
-        #     v = self.service.path[i + 1]
-        #     # 检查波长是否空闲
-        #     if not (self.topology[u][v]['wavelength_power'][action] == 0
-        #             or (np.isnan(self.topology[u][v]['wavelength_power'][action]))):
-        #         # 找出所有值为零的元素的索引
-        #         zero_indices = np.where(np.array(self.topology[u][v]['wavelength_power']) == 0.0)[0]
-        #         # if len(zero_indices) > 0:
-        #         #     action = np.random.choice(zero_indices)
-        #         # else:
-        #         allocation = False
-        #         reason = "wavelength occupied!"
-        #         break
-        #     else:
-        #         # 检查SNR是否满足要求
-        #         # 获取链路参数
-        #         distance = self.topology[u][v]['length']
-        #         channels = 80
-        #         if i == 0:
-        #             Power[i] = copy.deepcopy(self.topology[u][v]['wavelength_power'])
-        #             Power[i][action] = self.service.power
-        #
-        #         frequencies = np.concatenate(
-        #             [np.linspace(184.4e12, 190.25e12, channels // 2), np.linspace(190.75e12, 196.6e12, channels // 2)])
-        #
-        #         tmp = copy.deepcopy(self.topology[u][v]['wavelength_power'])
-        #         tmp[action] = self.service.power
-        #
-        #         if i != 0:
-        #             Power[i] = [Power[i][j] if Power[i][j] != 0 and tmp[j] != 0 else tmp[j] for j in
-        #                         range(len(Power[i]))]
-        #             tmp = Power[i]
-        #
-        #         Power_after_transmission, GSNR = one_link_transmission(distance, channels, tmp, frequencies)
-        #         path_GSNR[i] = GSNR
-        #
-        #         if self.service.snr_requirement > GSNR[action]:
-        #             allocation = False
-        #             reason = "GSNR not satisfied!!"
-        #             break
-        #         else:
-        #             Power[i + 1] = Power_after_transmission
-        #             #
-        #             # 检查该业务会不会对其它业务有影响，如有影响，则拒绝
-        #             for m in range(80):
-        #                 if m != action and self.topology[u][v]['wavelength_service'][m] != 0:
-        #                     tmp_service = self.service_dict.get(self.topology[u][v]['wavelength_service'][m], None)
-        #                     if tmp_service.snr_requirement >= GSNR[m]:
-        #                         allocation = False
-        #                         reason = 'interference!'
-        #                         outer_break = True
-        #                         break
         return allocation, Power, path_GSNR
 
     def only_calculate_reward(self, action, Power, path_GSNR):
@@ -332,7 +281,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
             v = self.service.path[i + 1]
             tmp_topology[u][v]['wavelength_power'] = Power[i]
             tmp_topology[u][v]['wavelength_SNR'] = path_GSNR[i]
-            capacity = 800 if tmp_topology[u][v]['wavelength_SNR'][action] > 27.1 else 400
+            capacity = 800 if tmp_topology[u][v]['wavelength_SNR'][action] > 26.5 else 400
             tmp_topology[u][v]['wavelength_utilization'][action] = self.service.bit_rate / capacity
             tmp_topology[u][v]['wavelength_service'][action] = self.service.service_id
 
@@ -342,7 +291,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
                     service_id = tmp_topology[u][v]['wavelength_service'][wave]
                     tmp_service = tmp_servicedict.get(service_id, None)
                     if tmp_service != None:
-                        capacity = 800 if tmp_topology[u][v]['wavelength_SNR'][wave] > 27.1 else 400
+                        capacity = 800 if tmp_topology[u][v]['wavelength_SNR'][wave] > 26.5 else 400
                         # if tmp_service.bit_rate / capacity < 1:
                         tmp_topology[u][v]['wavelength_utilization'][wave] = tmp_service.bit_rate / capacity
 
@@ -457,7 +406,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
                 v = self.service.path[i + 1]
                 self.topology[u][v]['wavelength_power'] = Power[i]
                 self.topology[u][v]['wavelength_SNR'] = path_GSNR[i]
-                capacity = 800 if self.topology[u][v]['wavelength_SNR'][action] > 27.1 else 400
+                capacity = 800 if self.topology[u][v]['wavelength_SNR'][action] > 26.5 else 400
                 self.topology[u][v]['wavelength_utilization'][action] = self.service.bit_rate / capacity
                 total_utilization += self.service.bit_rate / capacity
                 self.topology[u][v]['wavelength_service'][action] = self.service.service_id
@@ -468,7 +417,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
                         service_id = self.topology[u][v]['wavelength_service'][wave]
                         tmp_service = self.service_dict.get(service_id, None)
                         if tmp_service != None:
-                            capacity = 800 if self.topology[u][v]['wavelength_SNR'][wave] > 27.1 else 400
+                            capacity = 800 if self.topology[u][v]['wavelength_SNR'][wave] > 26.5 else 400
                             # if tmp_service.bit_rate / capacity < 1:
                             self.topology[u][v]['wavelength_utilization'][wave] = tmp_service.bit_rate / capacity
 
@@ -580,7 +529,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
                 v = self.service.path[i + 1]
                 self.topology[u][v]['wavelength_power'] = Power[i]
                 self.topology[u][v]['wavelength_SNR'] = path_GSNR[i]
-                capacity = 800 if self.topology[u][v]['wavelength_SNR'][action] > 27.1 else 400
+                capacity = 800 if self.topology[u][v]['wavelength_SNR'][action] > 26.5 else 400
                 self.topology[u][v]['wavelength_utilization'][action] = self.service.bit_rate / capacity
                 total_utilization += self.service.bit_rate / capacity
                 self.topology[u][v]['wavelength_service'][action] = self.service.service_id
@@ -591,7 +540,7 @@ class frag_MultibandOpticalNetworkEnv(gym.Env):
                         service_id = self.topology[u][v]['wavelength_service'][wave]
                         tmp_service = self.service_dict.get(service_id, None)
                         if tmp_service != None:
-                            capacity = 800 if self.topology[u][v]['wavelength_SNR'][wave] > 27.1 else 400
+                            capacity = 800 if self.topology[u][v]['wavelength_SNR'][wave] > 26.5 else 400
                             # if tmp_service.bit_rate / capacity < 1:
                             self.topology[u][v]['wavelength_utilization'][wave] = tmp_service.bit_rate / capacity
 
