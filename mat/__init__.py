@@ -1,4 +1,4 @@
-from mat import algorithms, envs, runner, scripts, utils, config
+from mat import algorithms, env, runner, scripts, utils, config
 
 
 __version__ = "0.1.0"

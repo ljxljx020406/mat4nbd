@@ -21,11 +21,11 @@ def get_config():
         --n_training_threads <int>
             number of training threads working in parallel. by default 1
         --n_rollout_threads <int>
-            number of parallel envs for training rollout. by default 32
+            number of parallel env for training rollout. by default 32
         --n_eval_rollout_threads <int>
-            number of parallel envs for evaluating rollout. by default 1
+            number of parallel env for evaluating rollout. by default 1
         --n_render_rollout_threads <int>
-            number of parallel envs for rendering, could only be set as 1 for some environments.
+            number of parallel env for rendering, could only be set as 1 for some environments.
         --num_env_steps <int>
             number of env steps to train (default: 10e6)
         --user_name <str>
@@ -165,33 +165,38 @@ def get_config():
     parser.add_argument("--cuda", action='store_false', default=True, help="by default True, will use GPU to train; or else will use CPU;")
     parser.add_argument("--cuda_deterministic",
                         action='store_false', default=True, help="by default, make sure random seed effective. if set, bypass such function.")
+    parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument("--n_training_threads", type=int,
                         default=1, help="Number of torch threads for training")
-    parser.add_argument("--n_rollout_threads", type=int, default=32,
-                        help="Number of parallel envs for training rollouts")
+    parser.add_argument("--n_rollout_threads", type=int, default=1,
+                        help="Number of parallel env for training rollouts")
     parser.add_argument("--n_eval_rollout_threads", type=int, default=1,
-                        help="Number of parallel envs for evaluating rollouts")
+                        help="Number of parallel env for evaluating rollouts")
     parser.add_argument("--n_render_rollout_threads", type=int, default=1,
-                        help="Number of parallel envs for rendering rollouts")
+                        help="Number of parallel env for rendering rollouts")
     parser.add_argument("--num_env_steps", type=int, default=10e6,
                         help='Number of environment steps to train (default: 10e6)')
     parser.add_argument("--user_name", type=str, default='xxx',help="[for wandb usage], to specify user's name for simply collecting training data.")
     parser.add_argument("--use_wandb", action='store_false', default=False, help="[for wandb usage], by default True, will log date to wandb server. or else will use tensorboard to log data.")
 
     # env parameters
-    parser.add_argument("--env_name", type=str, default='StarCraft2', help="specify the name of environment")
+    parser.add_argument("--env_name", type=str, default='MultibandOpticalNetworkEnv', help="specify the name of environment")
     parser.add_argument("--use_obs_instead_of_state", action='store_true',
                         default=False, help="Whether to use global state or concatenated obs")
 
     # replay buffer parameters
     parser.add_argument("--episode_length", type=int,
-                        default=200, help="Max length for any episode")
+                        default=10, help="Max length for any episode")
+    parser.add_argument("--max_buffer_size", type=int,
+                        default=10000, help="Max length for buffer")
+    parser.add_argument("--batch_size", type=int,
+                        default=10, help="Max length for batch")
 
     # network parameters
     parser.add_argument("--share_policy", action='store_false',
                         default=True, help='Whether agent share the same policy')
     parser.add_argument("--use_centralized_V", action='store_false',
-                        default=True, help="Whether to use centralized V function")
+                        default=False, help="Whether to use centralized V function")
     parser.add_argument("--stacked_frames", type=int, default=1,
                         help="Dimension of hidden layers for actor/critic networks")
     parser.add_argument("--use_stacked_frames", action='store_true',

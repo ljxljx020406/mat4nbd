@@ -9,9 +9,9 @@ import torch
 
 sys.path.append("../../")
 from mat.config import get_config
-from mat.envs.football.football_env import FootballEnv
-from mat.runner.shared.football_runner import FootballRunner as Runner
-from mat.envs.env_wrappers import ShareSubprocVecEnv, ShareDummyVecEnv
+from mat.env.football.football_env import FootballEnv
+from mat.runner.shared.optinet_runner import FootballRunner as Runner
+from mat.env.env_wrappers import ShareSubprocVecEnv, ShareDummyVecEnv
 
 
 """Train script for SMAC."""
@@ -61,7 +61,6 @@ def make_eval_env(all_args):
     else:
         return ShareSubprocVecEnv([get_env_fn(i) for i in range(all_args.eval_episodes)])
 
-
 def parse_args(args, parser):
     parser.add_argument('--scenario', type=str, default='academy_3_vs_1_with_keeper')
     parser.add_argument('--n_agent', type=int, default=3)
@@ -81,7 +80,6 @@ def parse_args(args, parser):
     all_args = parser.parse_known_args(args)[0]
 
     return all_args
-
 
 def main(args):
     parser = get_config()
@@ -161,7 +159,7 @@ def main(args):
 
     config = {
         "all_args": all_args,
-        "envs": envs,
+        "env": envs,
         "eval_envs": eval_envs,
         "num_agents": num_agents,
         "device": device,

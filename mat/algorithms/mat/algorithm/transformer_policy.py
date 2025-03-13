@@ -36,13 +36,12 @@ class TransformerPolicy:
             self.act_dim = act_space.n
             self.act_num = 1
         else:
-            print("act high: ", act_space.high)
             self.act_dim = act_space.shape[0]
             self.act_num = self.act_dim
 
-        print("obs_dim: ", self.obs_dim)
-        print("share_obs_dim: ", self.share_obs_dim)
-        print("act_dim: ", self.act_dim)
+        # print("obs_dim: ", self.obs_dim)
+        # print("share_obs_dim: ", self.share_obs_dim)
+        # print("act_dim: ", self.act_dim)
 
         self.num_agents = num_agents
         self.tpdv = dict(dtype=torch.float32, device=device)  # 指设备配置，指定张量的放置位置
@@ -93,7 +92,7 @@ class TransformerPolicy:
         """
         update_linear_schedule(self.optimizer, episode, episodes, self.lr)
 
-    def get_actions(self, cent_obs, obs, rnn_states_actor, rnn_states_critic, masks, available_actions=None,
+    def get_actions(self, cent_obs, obs, rnn_states_actor, rnn_states_critic, available_actions=None,
                     deterministic=False):
         """
         Compute actions and value function predictions for the given inputs.
@@ -112,7 +111,6 @@ class TransformerPolicy:
         :return rnn_states_actor: (torch.Tensor) updated actor network RNN states.
         :return rnn_states_critic: (torch.Tensor) updated critic network RNN states.
         """
-
         cent_obs = cent_obs.reshape(-1, self.num_agents, self.share_obs_dim)
         obs = obs.reshape(-1, self.num_agents, self.obs_dim)
         if available_actions is not None:
@@ -182,8 +180,11 @@ class TransformerPolicy:
         action_log_probs = action_log_probs.view(-1, self.act_num)
         values = values.view(-1, 1)
         entropy = entropy.view(-1, self.act_num)
+        # print('policy_entropy:', entropy.shape)
+        # print('policy_mask:', active_masks.shape)
 
         if self._use_policy_active_masks and active_masks is not None:
+            active_masks = active_masks.view(-1, 1)
             entropy = (entropy*active_masks).sum()/active_masks.sum()
         else:
             entropy = entropy.mean()

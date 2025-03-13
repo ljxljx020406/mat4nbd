@@ -1,7 +1,7 @@
 import networkx as nx
 import numpy as np
 from itertools import islice
-from utils import Path
+from back_utils import Path
 import pickle
 import random
 

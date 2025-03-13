@@ -19,8 +19,8 @@ class Runner(object):
     def __init__(self, config):
 
         self.all_args = config['all_args']
-        self.envs = config['envs']
-        self.eval_envs = config['eval_envs']
+        self.envs = config['env']
+        # self.eval_envs = config['eval_envs']
         self.device = config['device']
         self.num_agents = config['num_agents']
         if config.__contains__("render_envs"):
@@ -34,7 +34,6 @@ class Runner(object):
         self.use_obs_instead_of_state = self.all_args.use_obs_instead_of_state  # 是否使用观测信息而非状态信息
         self.num_env_steps = self.all_args.num_env_steps  # 训练过程中执行的环境步骤总数
         self.episode_length = self.all_args.episode_length  # 智能体在一次回合中执行的最大步数
-        self.n_rollout_threads = self.all_args.n_rollout_threads  # 使用的训练环境线程数
         self.n_eval_rollout_threads = self.all_args.n_eval_rollout_threads  # 评估时并行运行的环境线程数
         self.n_render_rollout_threads = self.all_args.n_render_rollout_threads
         self.use_linear_lr_decay = self.all_args.use_linear_lr_decay  # True：学习率在训练过程中按线性衰减
@@ -67,9 +66,9 @@ class Runner(object):
 
         share_observation_space = self.envs.share_observation_space[0] if self.use_centralized_V else self.envs.observation_space[0]
 
-        print("obs_space: ", self.envs.observation_space)
-        print("share_obs_space: ", self.envs.share_observation_space)
-        print("act_space: ", self.envs.action_space)
+        # print("obs_space: ", self.envs.observation_space)
+        # print("share_obs_space: ", self.envs.share_observation_space)
+        # print("act_space: ", self.envs.action_space)
 
         # policy network
         self.policy = Policy(self.all_args,
@@ -93,7 +92,7 @@ class Runner(object):
                                         self.envs.action_space[0],
                                          self.all_args.env_name)
 
-    def run(self):
+    def run(self, episode, episodes):
         """Collect training data, perform training updates, and evaluate policy."""
         raise NotImplementedError
 
@@ -127,7 +126,7 @@ class Runner(object):
                                                          np.concatenate(self.buffer.rnn_states_critic[-1]),
                                                          np.concatenate(self.buffer.masks[-1]),
                                                          np.concatenate(self.buffer.available_actions[-1]))
-        next_values = np.array(np.split(_t2n(next_values), self.n_rollout_threads))
+        next_values = np.array(_t2n(next_values))
         self.buffer.compute_returns(next_values, self.trainer.value_normalizer)
     
     def train(self):

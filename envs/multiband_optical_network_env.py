@@ -31,35 +31,60 @@ class MultibandOpticalNetworkEnv(gym.Env):
         self.blocked_service = blocked_service
 
         self.service_ids = list(self.service_to_be_sorting.keys())
-        self.observation_space = gym.spaces.Box(low=0, high=1+1e-6, shape=(81,2), dtype=float)
-        self.action_space = gym.spaces.Box(low=0, high=79, shape=(1,), dtype=int)
+        # self.observation_space = gym.spaces.Box(low=0, high=1+1e-6, shape=(81,2), dtype=float)
+        # self.share_observation_space = self.observation_space
+        self.observation_space = [gym.spaces.Box(low=0, high=1+1e-6, shape=(162,), dtype=float)
+                                  for n in range(self.num_agents)]
+        self.share_observation_space = self.observation_space.copy()
+        # self.action_space = gym.spaces.Box(low=0, high=79, shape=(1,), dtype=int)
+        self.action_space = [gym.spaces.Discrete(80) for n in range(self.num_agents)]
 
         self.initial_topology = copy.deepcopy(self.topology)
 
         self.episode_over = True
 
+        self.active_masks = np.ones((self.num_agents, 1), dtype=float)
+        self.active_masks[len(self.service_to_be_sorting):] = 0
 
-    def seed(self, seed):
-        '''
-        设置随机种子以确保实验的可重复性
-        '''
-        random.seed(seed)
-        np.random.seed(seed)
 
-    def reset(self, topology, service_dict, service_to_be_sorting):
+    # def seed(self, seed):
+    #     '''
+    #     设置随机种子以确保实验的可重复性
+    #     '''
+    #     random.seed(seed)
+    #     np.random.seed(seed)
+
+    def reset(self):
         # with open(topology_file, 'rb') as f:
             # self.topology = pickle.load(f)
-        self.topology = topology
-        # self.sorted_service_dict = sorted(service_dict.items(), key=lambda x: x[1].utilization)
-        self.service_dict = service_dict
-        self.service_to_be_sorting = service_to_be_sorting  # 已按重要程度降序排列
+        # self.topology = topology
+        # # self.sorted_service_dict = sorted(service_dict.items(), key=lambda x: x[1].utilization)
+        # self.service_dict = service_dict
+        # self.service_to_be_sorting = service_to_be_sorting  # 已按重要程度降序排列
         self.service_ids = list(self.service_to_be_sorting.keys())
 
         src = self.blocked_service.source_id
         dst = self.blocked_service.destination_id
         self.blocked_service.path = self.topology.graph['ksp'][str(src), str(dst)][0].node_list
 
-        return self.get_observation()
+        obs = self.get_observation()
+        shared_obs = obs
+        available_actions = np.ones((self.num_agents, 80))
+
+        for i in self.service_ids:
+            current_service = self.service_to_be_sorting[i]
+            index = self.service_ids.index(i)
+            for j in range((len(current_service.path)-1)):
+                u = current_service.path[j]
+                v = current_service.path[j + 1]
+                for k in range(80):
+                    if self.topology[u][v]['wavelength_service'][k] != 0:
+                        available_actions[index][k] = 0
+
+        # active_masks = np.ones((self.num_agents, 1), dtype=float)
+        # active_masks[len(self.service_to_be_sorting):] = 0
+
+        return obs, shared_obs, available_actions
 
     def get_observation(self):
         observation = []
@@ -95,7 +120,11 @@ class MultibandOpticalNetworkEnv(gym.Env):
 
             observation.append(tmp_observation)
 
+        while len(observation) < self.num_agents:
+            observation.append(np.zeros((81, 2)))
+
         observation_array = np.array(observation)
+        observation_array = observation_array.reshape((self.num_agents, 162))
 
         return observation_array
 
@@ -235,36 +264,20 @@ class MultibandOpticalNetworkEnv(gym.Env):
 
         # 综合评估：带宽碎片度定义为利用率因子和一致性因子的加权和
         network_fragmentation = 0.9 * (1 - avg_utilization) + 0.1 * std_deviation  # 简化的计算公式，权重可以调整
+        # print(avg_utilization, std_deviation)
 
         return network_fragmentation
 
-    def _calculate_network_utilization(self):
-        # 计算整个网络的带宽碎片度
-        all_utilization_rates = []
-        utilizations = []
-        for u, v in self.topology.edges():
-            edge_data = self.topology[u][v]
-            utilizations.append(edge_data['wavelength_utilization'])
-            occupied_wavelengths = np.count_nonzero(np.array(edge_data['wavelength_power']) > 0)
-            total_utilization = 0
-            for i in range(len(edge_data['wavelength_power'])):
-                total_utilization += edge_data['wavelength_utilization'][i]
-            if occupied_wavelengths == 0:
-                utilization_rate = 0
-            else:
-                utilization_rate = total_utilization / occupied_wavelengths
-            all_utilization_rates.append(utilization_rate)
-
-        # 利用率因子：网络中所有链路的带宽利用率的平均值
-        avg_utilization = np.mean(all_utilization_rates)
-        return avg_utilization
-
     def calculate_reward(self, new_topology):
         origin_frag = self.calculate_network_fragmentation(self.topology)
+        # print('origin_frag:', origin_frag)
         current_frag = self.calculate_network_fragmentation(new_topology)
+        # print('current_frag:', current_frag)
+        # print(self.topology == new_topology)
         return (origin_frag - current_frag) * 10
 
     def make_step(self, actions, current_step, episode_length):
+        blocked_allocation = False
         rewards = np.zeros((self.num_agents, 1))
         available_actions = np.ones((self.num_agents, 80))
         dones = np.ones(self.num_agents, dtype=bool)
@@ -273,25 +286,29 @@ class MultibandOpticalNetworkEnv(gym.Env):
         for i in self.service_ids:
             index = self.service_ids.index(i)
             current_service = self.service_to_be_sorting[i]
+            # print(i, 'current_service:', current_service.service_id, current_service.wavelength, actions[index])
             tmp_topology = copy.deepcopy(self.topology)
             tmp_service_dict = copy.deepcopy(self.service_dict)
-            allocation, path, wavelength = self.check_action(int(actions[index]), tmp_topology,
-                                                             current_service, tmp_service_dict)
+            allocation, path, GSNR = self.check_action(int(actions[index]), tmp_topology, current_service, tmp_service_dict)
             if allocation:
+                # print('allocation!')
                 self.service_dict = tmp_service_dict
                 rewards[index] = self.calculate_reward(tmp_topology)
+                # print('reward:', rewards)
                 self.topology = tmp_topology
             else:
+                # print('not allocation!')
                 rewards[index] = -1
 
         if current_step == episode_length:
             dones = np.ones(self.num_agents, dtype=bool)
         path, wavelength, reason = naive_RWA(self.topology, self.blocked_service, self.service_dict)
         if wavelength != None:
+            blocked_allocation = True
             dones = np.ones(self.num_agents, dtype=bool)
 
-        shared_obs = []
         obs = self.get_observation()
+        shared_obs = obs
 
         for i in self.service_ids:
             current_service = self.service_to_be_sorting[i]
@@ -302,4 +319,4 @@ class MultibandOpticalNetworkEnv(gym.Env):
                 for k in range(80):
                     if self.topology[u][v]['wavelength_service'][k] != 0:
                         available_actions[index][k] = 0
-        return obs, shared_obs, rewards, dones, infos, available_actions
+        return obs, shared_obs, rewards, dones, infos, available_actions, blocked_allocation

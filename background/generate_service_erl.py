@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath('../topology'))
 sys.path.append(os.path.abspath('../service'))
 sys.path.append(os.path.abspath('../background'))
 from main_functions import release_service, one_link_transmission, first_fit, _get_node_pair, naive_RWA
-from utils import Service
+from back_utils import Service
 
 rng = random.Random(46)
 

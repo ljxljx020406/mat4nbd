@@ -8,7 +8,7 @@ import copy
 import numpy as np
 from numpy import log10, abs, arange, arcsinh, arctan, isfinite, log, mean, pi, sum, zeros, exp
 import math
-from utils import Service
+from back_utils import Service
 import pickle
 import random
 import sys
@@ -26,7 +26,7 @@ sys.path.append(os.path.abspath('../gnpy_transmission'))
 # [2] Modeling and mitigation of fiber nonlinearity in wideband optical signal transmission
 
 # 1. one_link_transmission function
-@njit(nogil=True)
+@njit(nogil=True, cache=True)
 def get_alpha(frequency):
     '''
     计算不同频率处的alpha值
@@ -40,7 +40,7 @@ def get_alpha(frequency):
     #print('alpha:', alpha)
     return alpha/ 4.343 / 1e3
 
-@njit(nogil=True)
+@njit(nogil=True, cache=True)
 def get_r_f(frequency, P_total):
     '''
     计算SRS的中间过程
@@ -70,7 +70,7 @@ def get_r_f(frequency, P_total):
     else:
         return 0.0
 
-@njit(parallel=True, nogil=True)
+@njit(parallel=True, nogil=True, cache=True)
 def get_Pi_z(distance, P_total, frequencies, Power, i, channels):
     '''
     计算经过distance传输后各信道的功率值
@@ -97,7 +97,7 @@ def get_Pi_z(distance, P_total, frequencies, Power, i, channels):
     # print("Power after z:", result)
     return result
 
-@njit(nogil=True)
+@njit(nogil=True, cache=True)
 def lin2db(value):
     '''
     ln -> dB
@@ -109,7 +109,7 @@ def watt2dbm(value):
     '''
     return lin2db(value * 1e3)
 
-@njit(nogil=True)
+@njit(nogil=True, cache=True)
 def removenan(x):
     '''
     除掉nan值
@@ -123,7 +123,7 @@ def todB(x):
     '''
     return 10 * log(x) / log(10)
 
-@njit(parallel=True, nogil=True)
+@njit(parallel=True, nogil=True, cache=True)
 def calculate_ASE_noise(Att, fi, Bch, distance):
     channels, n = fi.shape
     c = 3e8
@@ -144,7 +144,7 @@ def calculate_ASE_noise(Att, fi, Bch, distance):
 
     return np.sum(single_ASE, axis=1)
 
-@njit(parallel=True, nogil=True)
+@njit(parallel=True, nogil=True, cache=True)
 def _numba_one_link_transmission(distance, channels, Power, frequencies):
     P_total = np.sum(Power)
     for i in prange(channels):
@@ -163,18 +163,18 @@ def _numba_one_link_transmission(distance, channels, Power, frequencies):
     return ASE_noise, Power
     # return copy_Power
 
-@njit(nogil=True)
+@njit(nogil=True, cache=True)
 def cal_eps(B_i, f_i, a_i, mean_L, beta2, beta3):
     return (3 / 10) * log(1 + (6 / a_i) / (
                     mean_L * arcsinh(pi ** 2 / 2 * abs(mean(beta2) + 2 * pi * mean(beta3) * f_i) / a_i * B_i ** 2)))
 
-@njit(nogil=True)
+@njit(nogil=True, cache=True)
 def cal_SPM(phi_i, T_i, B_i, a, a_bar, gamma):
  return 4 / 9 * gamma ** 2 / B_i ** 2 * pi / (phi_i * a_bar * (2 * a + a_bar)) \
          * ((T_i - a ** 2) / a * arcsinh(phi_i * B_i ** 2 / a / pi) + ((a + a_bar) ** 2 - T_i) / (a + a_bar) * arcsinh(
          phi_i * B_i ** 2 / (a + a_bar) / pi))
 
-@njit(nogil=True)
+@njit(nogil=True, cache=True)
 def cal_XPM(Pi, Pk, phi_ik, T_k, B_i, B_k, a, a_bar, gamma):
     if Pi == 0:
         return 0
@@ -184,7 +184,7 @@ def cal_XPM(Pi, Pk, phi_ik, T_k, B_i, B_k, a, a_bar, gamma):
                                 + ((a + a_bar) ** 2 - T_k) / (a + a_bar) * np.arctan(phi_ik * B_i / (a + a_bar)))
                              )
 
-@njit(parallel=True, nogil=True)
+@njit(parallel=True, nogil=True, cache=True)
 def calculate_NLI_noise(
         Att, Att_bar, Cr, Pch, fi, Bch, Length, D, S, gamma, RefLambda):
     """
@@ -299,7 +299,7 @@ def calculate_NLI_noise(
     #print("NLI:",NLI)
     return NLI
 
-@njit(parallel=True, nogil=True)
+@njit(parallel=True, nogil=True, cache=True)
 def calculate_GSNR(Power, noise, channels):
     GSNR = np.zeros(channels)
     for i in prange(channels):
@@ -336,7 +336,7 @@ def calculate_GSNR(Power, noise, channels):
 #     print('one_link_trans', end-start)
 #     return Power_after_transmission, GSNR
 
-@njit(parallel=True, nogil=True)
+@njit(parallel=True, nogil=True, cache=True)
 def tile_implementation(fi, num_of_spans):
     rows, cols = fi.shape
     expanded = np.empty((rows, num_of_spans))  # 创建一个新的数组，大小为 (rows, 8)
@@ -447,14 +447,14 @@ def _get_node_pair(topology):
     dst_id = topology.graph['node_indices'].index(dst)
     return src, src_id, dst, dst_id
 
-def new_service(topology, services_processed_since_reset):
+def new_service(topology, services_processed_since_reset, bit_rate1, bit_rate2):
     '''
     生成一个随机业务
     '''
     src, src_id, dst, dst_id = _get_node_pair(topology)
 
     # list of possible bit-rates for the request
-    bit_rate = rng2.randint(100, 800)
+    bit_rate = rng2.randint(bit_rate1, bit_rate2)
     # values = [800, 400]
     # probabilities = [0.25, 0.75]
     #
@@ -485,6 +485,7 @@ def naive_RWA(topology, service:Service, service_dict):
     src = service.source_id
     dst = service.destination_id
     bit_rate = service.bit_rate
+    total_utilization = 0
     allocation = False
     reason = None
     # if bit_rate > 400:
@@ -506,7 +507,7 @@ def naive_RWA(topology, service:Service, service_dict):
 
     for path in topology.graph['ksp'][str(src), str(dst)]:
         path_start_time = time.time()
-        start_wavelength = random.randint(0, 80 - 1)
+        start_wavelength = rng1.randint(0, 80 - 1)
         wave_reason = np.zeros(80)
         for offset in range(80):
             j = (start_wavelength + offset) % 80
@@ -575,24 +576,24 @@ def naive_RWA(topology, service:Service, service_dict):
                         wave_reason[j] = 2
                         allocation = False
                         break
-                    # else:
-                    #     # Power[i+1] = Power_after_transmission
-                    #     # print("power[i+1]:", Power[i+1])
-                    #
-                    #     # 检查该业务会不会对其它业务有影响，如有影响，则拒绝
-                    #     for m in range(80):
-                    #         if m != j and topology[u][v]['wavelength_service'][m] != 0:
-                    #             tmp_service = service_dict.get(topology[u][v]['wavelength_service'][m], None)
-                    #             # print('tmp_service:', tmp_service.snr_requirement, tmp_service.bit_rate, tmp_service.path)
-                    #             # print(service_dict.keys())
-                    #             # print('id:', topology[u][v]['wavelength_service'][m])
-                    #             if tmp_service.snr_requirement >= GSNR[m]:
-                    #                 # print('tmp_service:', tmp_service.service_id, tmp_service.path)
-                    #                 allocation = False
-                    #                 reason = 'interference!'
-                    #                 wave_reason[j] = 3
-                    #                 outer_break = True
-                    #                 break
+                    else:
+                        # Power[i+1] = Power_after_transmission
+                        # print("power[i+1]:", Power[i+1])
+
+                        # 检查该业务会不会对其它业务有影响，如有影响，则拒绝
+                        for m in range(80):
+                            if m != j and topology[u][v]['wavelength_service'][m] != 0:
+                                tmp_service = service_dict.get(topology[u][v]['wavelength_service'][m], None)
+                                # print('tmp_service:', tmp_service.snr_requirement, tmp_service.bit_rate, tmp_service.path)
+                                # print(service_dict.keys())
+                                # print('id:', topology[u][v]['wavelength_service'][m])
+                                if tmp_service.snr_requirement >= GSNR[m]:
+                                    # print('tmp_service:', tmp_service.service_id, tmp_service.path)
+                                    allocation = False
+                                    reason = 'interference!'
+                                    wave_reason[j] = 3
+                                    outer_break = True
+                                    break
 
             path_iteration_end = time.time()
             # print(f"单条路径遍历耗时: {path_iteration_end - path_iteration_time:.6f} 秒")
@@ -607,6 +608,7 @@ def naive_RWA(topology, service:Service, service_dict):
                     v = path.node_list[i + 1]
                     topology[u][v]['wavelength_power'] = Power[i]
                     topology[u][v]['wavelength_SNR'] = path_GSNR[i]
+                    topology[u][v]['wavelength_bitrate'][j] = service.bit_rate
                     if topology[u][v]['wavelength_SNR'][j] > 24.6:
                         capacity = 900
                     elif topology[u][v]['wavelength_SNR'][j] > 21.6:
@@ -621,29 +623,31 @@ def naive_RWA(topology, service:Service, service_dict):
                         capacity = 150
                     # capacity = 800 if topology[u][v]['wavelength_SNR'][j] > 26.5 else 400
                     topology[u][v]['wavelength_utilization'][j] = bit_rate/capacity
+                    total_utilization += bit_rate/capacity
                     topology[u][v]['wavelength_service'][j] = service.service_id
+                    service.utilization = total_utilization / len(service.path)
 
-                    # # # 重新更新涉及链路上所有波长处的带宽利用率！！！！！
-                    # for wave in range(80):
-                    #     if wave != j and topology[u][v]['wavelength_service'][wave] != 0:
-                    #         service_id = topology[u][v]['wavelength_service'][wave]
-                    #         tmp_service = service_dict.get(service_id, None)
-                    #         # print('tmp_service:', service_id)
-                    #         if topology[u][v]['wavelength_SNR'][wave] > 24.6:
-                    #             capacity = 900
-                    #         elif topology[u][v]['wavelength_SNR'][wave] > 21.6:
-                    #             capacity = 750
-                    #         elif topology[u][v]['wavelength_SNR'][wave] > 18.6:
-                    #             capacity = 600
-                    #         elif topology[u][v]['wavelength_SNR'][wave] > 16:
-                    #             capacity = 450
-                    #         elif topology[u][v]['wavelength_SNR'][wave] > 12:
-                    #             capacity = 300
-                    #         else:
-                    #             capacity = 150
+                    # # 重新更新涉及链路上所有波长处的带宽利用率！！！！！
+                    for wave in range(80):
+                        if wave != j and topology[u][v]['wavelength_service'][wave] != 0:
+                            service_id = topology[u][v]['wavelength_service'][wave]
+                            tmp_service = service_dict.get(service_id, None)
+                            # print('tmp_service:', service_id)
+                            if topology[u][v]['wavelength_SNR'][wave] > 24.6:
+                                capacity = 900
+                            elif topology[u][v]['wavelength_SNR'][wave] > 21.6:
+                                capacity = 750
+                            elif topology[u][v]['wavelength_SNR'][wave] > 18.6:
+                                capacity = 600
+                            elif topology[u][v]['wavelength_SNR'][wave] > 16:
+                                capacity = 450
+                            elif topology[u][v]['wavelength_SNR'][wave] > 12:
+                                capacity = 300
+                            else:
+                                capacity = 150
                     #         # capacity = 800 if topology[u][v]['wavelength_SNR'][wave] > 26.5 else 400
                     #         # if tmp_service.bit_rate / capacity < 1:
-                    #         topology[u][v]['wavelength_utilization'][wave] = tmp_service.bit_rate / capacity
+                            topology[u][v]['wavelength_utilization'][wave] = tmp_service.bit_rate / capacity
                     #         if tmp_service.bit_rate / capacity > 1:
                     #             print('异常！！！！！！', tmp_service.service_id, tmp_service.snr_requirement, topology[u][v]['wavelength_SNR'][wave], tmp_service.bit_rate, capacity, tmp_service.path)
 
@@ -655,6 +659,37 @@ def naive_RWA(topology, service:Service, service_dict):
     # print(f"函数总运行时间: {end_time - start_time:.6f} 秒")
     # print('分配失败', reason)
     return None, None, wave_reason
+
+def select_sorting_services(service_dict, blocked_service, current_time, num_agent, upper_utilization):
+    '''
+    从service_dict中选出与blocked_service.path有重合链路的service，按照重合链路数排序，重合链路数多的排在前面。
+    如果重合链路数相同，则按照带宽利用率和剩余时间（current_time - service.arrival_time）排序，带宽利用率低、剩余时间长的排在前面。
+    :return: (dict) 排序后的service对象字典
+    '''
+    def path_to_links(path):
+        """ 将路径节点序列转换为 **无向链路集合** """
+        return {(min(int(path[i]), int(path[i + 1])), max(int(path[i]), int(path[i + 1])))
+                for i in range(len(path) - 1)}
+
+    overlapping_services = []
+    blocked_links = path_to_links(blocked_service.path)  # 计算 blocked_service 的链路集合
+
+    for service in service_dict.values():
+        # 计算重合链路数
+        service_links = path_to_links(service.path)  # 将 service 的路径转换为链路集合
+        overlap_count = len(blocked_links & service_links)  # 计算与 blocked_service 的重合链路数
+
+        if overlap_count > 0 and service.utilization < upper_utilization:
+            remaining_time = current_time - service.arrival_time
+            overlapping_services.append((service, service.utilization, overlap_count, remaining_time))
+            # print('overlap:', service.service_id, service.utilization, overlap_count, remaining_time)
+
+    # 先按重合链路数降序排序，再按剩余时间降序排序
+    overlapping_services.sort(key=lambda x: (-x[2], x[1], -x[3]))
+
+    # 返回排序后的服务对象列表
+    return {s[0].service_id: s[0] for s in overlapping_services[:num_agent]}
+
 
 def new_first_fit(topology, service:Service, service_dict):
     '''
@@ -1012,15 +1047,12 @@ def check_utilization(topology, path, service_dict):
 
 # 4. release a service
 def release_service(topology, service:Service, service_dict):
-    # 有问题。。。
     '''
     service_dict: 业务字典，键为service_id，值为service对象
     释放指定的某个业务，并更新相关链路的状态
     '''
-    # print('service_id:', service.service_id)
     # 更新链路状态
     del service_dict[service.service_id]
-    Power_after_transmission = np.zeros(80)
     for i in range(len(service.path) - 1):
         u = service.path[i]
         v = service.path[i + 1]
@@ -1029,7 +1061,7 @@ def release_service(topology, service:Service, service_dict):
         topology[u][v]['wavelength_utilization'][service.wavelength] = 0
         topology[u][v]['wavelength_SNR'][service.wavelength] = 0
         topology[u][v]['wavelength_service'][service.wavelength] = 0
-        # 可能还需要更新其他链路状态信息
+        topology[u][v]['wavelength_bitrate'][service.wavelength] = 0
 
         # 重新计算链路状态（例如更新GSNR）
         distance = topology[u][v]['length']
@@ -1064,26 +1096,32 @@ def release_service(topology, service:Service, service_dict):
 
         # 更新该链路所有传输载波的利用率
         for j in range(channels):
-            # if not (topology[u][v]['wavelength_power'][j] == 0 or (np.isnan(topology[u][v]['wavelength_power'][j])))\
-            #         and topology[u][v]['wavelength_service'][j] != 0:
-            if topology[u][v]['wavelength_service'][j] != 0 and j != service.wavelength:
+            if topology[u][v]['wavelength_service'][j] != 0:
                 service_id = topology[u][v]['wavelength_service'][j]
                 tmp_service1 = service_dict.get(int(service_id), None)
                 if tmp_service1==None:
-                    print('id:', service_id)
+                    print('id:', j, service_id)
                     print('ids:', service_dict.keys())
                 # capacity = 800 if topology[u][v]['wavelength_SNR'][j] > 26.5 else 400
-                if topology[u][v]['wavelength_SNR'][j] > 26.5:
-                    capacity = 800
-                elif topology[u][v]['wavelength_SNR'][j] > 18.2:
-                    capacity = 400
+                if topology[u][v]['wavelength_SNR'][j] > 24.6:
+                    capacity = 900
+                elif topology[u][v]['wavelength_SNR'][j] > 21.6:
+                    capacity = 750
+                elif topology[u][v]['wavelength_SNR'][j] > 18.6:
+                    capacity = 600
+                elif topology[u][v]['wavelength_SNR'][j] > 16:
+                    capacity = 450
+                elif topology[u][v]['wavelength_SNR'][j] > 12:
+                    capacity = 300
                 else:
-                    capacity = 200
+                    capacity = 150
                 topology[u][v]['wavelength_utilization'][j] = tmp_service1.bit_rate / capacity
                 # print('service_id:', tmp_service.service_id, 'bitrate:', bit_rate, 'capacity:', capacity)
             else:
                 topology[u][v]['wavelength_power'][j] = 0
                 topology[u][v]['wavelength_utilization'][j] = 0
+                topology[u][v]['wavelength_SNR'][j] = 0
+                topology[u][v]['wavelength_bitrate'][j] = 0
 
     # # 打印释放后的链路状态
     # print("释放后的链路状态:")

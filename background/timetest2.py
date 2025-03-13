@@ -20,8 +20,20 @@ Power[10:30] = 0
 Power[40:50] = 0
 frequencies = np.concatenate([np.linspace(184.4e12, 190.25e12, channels // 2), np.linspace(190.75e12, 196.6e12, channels // 2)])
 
+time1 = time.time()
 Power1, GSNR1 = one_link_transmission(distance, channels, Power, frequencies)
-print('GSNR:', GSNR1)
+time2 = time.time()
+print(time2-time1)
+
+time1 = time.time()
+Power1, GSNR1 = one_link_transmission(distance, channels, Power, frequencies)
+time2 = time.time()
+print(time2-time1)
+
+time1 = time.time()
+Power1, GSNR1 = one_link_transmission(distance, channels, Power, frequencies)
+time2 = time.time()
+print(time2-time1)
 
 # Power = 0.0031622776602 * np.ones(channels)
 # Power[5] = 0

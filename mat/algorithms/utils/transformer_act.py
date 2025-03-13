@@ -33,8 +33,18 @@ def discrete_parallel_act(decoder, obs_rep, obs, action, batch_size, n_agent, ac
     shifted_action[:, 0, 0] = 1
     shifted_action[:, 1:, 1:] = one_hot_action[:, :-1, :]
     logit = decoder(shifted_action, obs_rep, obs)
+    # print("available_actions shape:", available_actions.shape)
+    # print("available_actions min:", available_actions.min().item(), "available_actions max:",
+    #       available_actions.max().item())
+    # print("Number of 0s in available_actions:", (available_actions == 0).sum().item())
+    # print("logits before mask:", logit)
+
     if available_actions is not None:
         logit[available_actions == 0] = -1e10
+
+    # print("logits:", logit)
+    # print("logits min:", logit.min().item(), "logits max:", logit.max().item())
+    # print("Number of NaNs in logits:", torch.isnan(logit).sum().item())
 
     distri = Categorical(logits=logit)
     action_log = distri.log_prob(action.squeeze(-1)).unsqueeze(-1)

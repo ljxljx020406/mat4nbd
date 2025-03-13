@@ -1,7 +1,7 @@
 import networkx as nx
 import numpy as np
 from itertools import islice
-from utils import Path
+from back_utils import Path
 import pickle
 
 def read_txt_file(file):
@@ -45,11 +45,13 @@ for u, v in topology.edges():
     wavelength_power = np.zeros(80, dtype=float)
     wavelength_utilization = np.zeros(80, dtype=float)
     wavelength_SNR = np.zeros(80, dtype=float)
-    wavelength_service = np.zeros(80)
+    wavelength_service = np.zeros(80, dtype=int)
+    wavelength_bitrate = np.zeros(80)
     topology[u][v]['wavelength_power'] = wavelength_power
     topology[u][v]['wavelength_utilization'] = wavelength_utilization
     topology[u][v]['wavelength_SNR'] = wavelength_SNR
     topology[u][v]['wavelength_service'] = wavelength_service
+    topology[u][v]['wavelength_bitrate'] = wavelength_bitrate
     topology[u][v]['numsp'] = 0
     topology[u][v]['edge_id'] = id
     id += 1

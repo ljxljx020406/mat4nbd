@@ -109,10 +109,16 @@ class MATTrainer:
         # adv_targ：优势函数，论文中的A
 
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
+        old_action_log_probs_batch = old_action_log_probs_batch.view(-1, 1)
         adv_targ = check(adv_targ).to(**self.tpdv)
+        adv_targ = adv_targ.view(-1, 1)
         value_preds_batch = check(value_preds_batch).to(**self.tpdv)
+        value_preds_batch = value_preds_batch.view(-1, 1)
         return_batch = check(return_batch).to(**self.tpdv)
+        return_batch = return_batch.view(-1, 1)
         active_masks_batch = check(active_masks_batch).to(**self.tpdv)
+        active_masks_batch = active_masks_batch.view(-1, 1)
+
 
         # Reshape to do in a single forward pass for all steps
         values, action_log_probs, dist_entropy = self.policy.evaluate_actions(share_obs_batch,
@@ -165,6 +171,7 @@ class MATTrainer:
         advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
         mean_advantages = np.nanmean(advantages_copy)
         std_advantages = np.nanstd(advantages_copy)
+        # print('adv:', advantages_copy)
         advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
         
 
@@ -178,10 +185,11 @@ class MATTrainer:
         train_info['ratio'] = 0
 
         for _ in range(self.ppo_epoch):
+            # print('ppo_epoch:', _)
             data_generator = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
-
+            # print(data_generator)
             for sample in data_generator:
-
+                # print(sample)
                 value_loss, critic_grad_norm, policy_loss, dist_entropy, actor_grad_norm, imp_weights \
                     = self.ppo_update(sample)
 
