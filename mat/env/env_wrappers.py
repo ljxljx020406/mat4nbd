@@ -1,5 +1,5 @@
 """
-Modified from OpenAI Baselines code to work with multi-agent envs
+Modified from OpenAI Baselines code to work with multi-agent env
 """
 import numpy as np
 import torch
@@ -177,7 +177,7 @@ def worker(remote, parent_remote, env_fn_wrapper):
 class GuardSubprocVecEnv(ShareVecEnv):
     def __init__(self, env_fns, spaces=None):
         """
-        envs: list of gym environments to run in subprocesses
+        env: list of gym environments to run in subprocesses
         """
         self.waiting = False
         self.closed = False
@@ -235,7 +235,7 @@ class GuardSubprocVecEnv(ShareVecEnv):
 class SubprocVecEnv(ShareVecEnv):
     def __init__(self, env_fns, spaces=None):
         """
-        envs: list of gym environments to run in subprocesses
+        env: list of gym environments to run in subprocesses
         """
         self.waiting = False
         self.closed = False
@@ -343,7 +343,7 @@ def shareworker(remote, parent_remote, env_fn_wrapper):
 class ShareSubprocVecEnv(ShareVecEnv):
     def __init__(self, env_fns, spaces=None):
         """
-        envs: list of gym environments to run in subprocesses
+        env: list of gym environments to run in subprocesses
         """
         self.waiting = False
         self.closed = False
@@ -434,7 +434,7 @@ def choosesimpleworker(remote, parent_remote, env_fn_wrapper):
 class ChooseSimpleSubprocVecEnv(ShareVecEnv):
     def __init__(self, env_fns, spaces=None):
         """
-        envs: list of gym environments to run in subprocesses
+        env: list of gym environments to run in subprocesses
         """
         self.waiting = False
         self.closed = False
@@ -524,7 +524,7 @@ def chooseworker(remote, parent_remote, env_fn_wrapper):
 class ChooseSubprocVecEnv(ShareVecEnv):
     def __init__(self, env_fns, spaces=None):
         """
-        envs: list of gym environments to run in subprocesses
+        env: list of gym environments to run in subprocesses
         """
         self.waiting = False
         self.closed = False
@@ -607,7 +607,7 @@ def chooseguardworker(remote, parent_remote, env_fn_wrapper):
 class ChooseGuardSubprocVecEnv(ShareVecEnv):
     def __init__(self, env_fns, spaces=None):
         """
-        envs: list of gym environments to run in subprocesses
+        env: list of gym environments to run in subprocesses
         """
         self.waiting = False
         self.closed = False

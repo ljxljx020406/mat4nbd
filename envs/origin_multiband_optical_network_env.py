@@ -17,9 +17,9 @@ from numba import jit, njit, prange
 from concurrent.futures import ThreadPoolExecutor
 
 
-class MultibandOpticalNetworkEnv(gym.Env):
+class origin_MultibandOpticalNetworkEnv(gym.Env):
     def __init__(self, topology, service_dict, service_to_be_sorting):
-        super(MultibandOpticalNetworkEnv, self).__init__()
+        super(origin_MultibandOpticalNetworkEnv, self).__init__()
         # 加载拓扑
         # with open(topology_file, 'rb') as f:
         #     self.topology = pickle.load(f)
