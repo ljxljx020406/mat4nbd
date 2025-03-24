@@ -112,6 +112,11 @@ class MATTrainer:
         old_action_log_probs_batch = old_action_log_probs_batch.view(-1, 1)
         adv_targ = check(adv_targ).to(**self.tpdv)
         adv_targ = adv_targ.view(-1, 1)
+        raw_adv = return_batch - value_preds_batch
+        print("Raw advantage mean:", raw_adv.mean().item(), "std:", raw_adv.std().item(), "min:", raw_adv.min().item(),
+              "max:", raw_adv.max().item())
+
+        adv_targ = (adv_targ - adv_targ.mean()) / (adv_targ.std() + 1e-5)
         value_preds_batch = check(value_preds_batch).to(**self.tpdv)
         value_preds_batch = value_preds_batch.view(-1, 1)
         return_batch = check(return_batch).to(**self.tpdv)
@@ -132,6 +137,8 @@ class MATTrainer:
         # actor update
         imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch)  # 新老策略的比值，论文中公式（5-2）
 
+        print('adv:', adv_targ.mean().item(), adv_targ.std().item())
+        print('imp_weights:', imp_weights.mean().item(), imp_weights.std().item())
         surr1 = imp_weights * adv_targ
         surr2 = torch.clamp(imp_weights, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
 
@@ -167,13 +174,13 @@ class MATTrainer:
 
         :return train_info: (dict) contains information regarding training update (e.g. loss, grad norms, etc).
         """
-        advantages_copy = buffer.advantages.copy()
-        advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
-        mean_advantages = np.nanmean(advantages_copy)
-        std_advantages = np.nanstd(advantages_copy)
-        # print('adv:', advantages_copy)
-        advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
-        
+        # advantages_copy = buffer.advantages.copy()
+        # advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
+        # mean_advantages = np.nanmean(advantages_copy)
+        # std_advantages = np.nanstd(advantages_copy)
+        # # print('adv:', advantages_copy)
+        # advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
+        advantages = buffer.advantages
 
         train_info = {}
 

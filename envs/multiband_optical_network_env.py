@@ -274,7 +274,7 @@ class MultibandOpticalNetworkEnv(gym.Env):
         current_frag = self.calculate_network_fragmentation(new_topology)
         # print('current_frag:', current_frag)
         # print(self.topology == new_topology)
-        return (origin_frag - current_frag) * 100
+        return (origin_frag - current_frag) * 500
 
     def make_step(self, actions, current_step, episode_length):
         blocked_allocation = False

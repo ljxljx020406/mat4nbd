@@ -30,7 +30,7 @@ from background.main_functions import new_service, naive_RWA, release_service, s
 rng1 = np.random.default_rng(42)
 rng2 = np.random.default_rng(42)
 
-num_agent = 20
+num_agent = 10
 
 
 def parse_args(args, parser):

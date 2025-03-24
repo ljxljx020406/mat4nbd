@@ -35,6 +35,8 @@ class SharedReplayBuffer(object):
 
     def __init__(self, args, num_agents, obs_space, cent_obs_space, act_space, env_name):
         self.episode_length = args.episode_length
+        self.n_rollout_episodes = args.n_rollout_episodes
+        self.max_buffer_size = self.n_rollout_episodes * (self.episode_length + 1)
 
         self.hidden_size = args.hidden_size
         self.recurrent_N = args.recurrent_N
@@ -228,7 +230,7 @@ class SharedReplayBuffer(object):
 
                 self.advantages[step] = gae
                 self.returns[step] = gae + self.value_preds[step]
-        # print('compute_return:', self.advantages)
+        print('compute_return:', self.advantages, self.advantages.mean(), self.advantages.std())
 
     def feed_forward_generator_transformer(self, advantages, num_mini_batch=None, mini_batch_size=None):
         """

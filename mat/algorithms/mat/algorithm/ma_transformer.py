@@ -119,11 +119,20 @@ class Encoder(nn.Module):
         self.n_agent = n_agent
         self.encode_state = encode_state
         # self.agent_id_emb = nn.Parameter(torch.zeros(1, n_agent, n_embd))
+        self.agent_id_emb = nn.Embedding(n_agent, n_embd)
 
         self.state_encoder = nn.Sequential(nn.LayerNorm(state_dim),
                                            init_(nn.Linear(state_dim, n_embd), activate=True), nn.GELU())
-        self.obs_encoder = nn.Sequential(nn.LayerNorm(obs_dim),
-                                         init_(nn.Linear(obs_dim, n_embd), activate=True), nn.GELU())  # 改！现嵌入层是线性的，改为BERT感知上下文词向量表示
+        # self.obs_encoder = nn.Sequential(nn.LayerNorm(obs_dim),
+        #                                  init_(nn.Linear(obs_dim, n_embd), activate=True), nn.GELU())  # 改！现嵌入层是线性的，改为BERT感知上下文词向量表示
+        self.obs_encoder = nn.Sequential(
+            nn.LayerNorm(obs_dim),
+            init_(nn.Linear(obs_dim, n_embd), activate=True),
+            nn.GELU(),
+            init_(nn.Linear(n_embd, n_embd), activate=True),
+            nn.GELU(),
+            nn.LayerNorm(n_embd)
+        )
 
         self.ln = nn.LayerNorm(n_embd)
         self.blocks = nn.Sequential(*[EncodeBlock(n_embd, n_head, n_agent) for _ in range(n_block)])
@@ -138,7 +147,12 @@ class Encoder(nn.Module):
             x = state_embeddings
         else:
             obs_embeddings = self.obs_encoder(obs)
-            x = obs_embeddings
+            # x = obs_embeddings
+            batch_size = obs.shape[0]
+            agent_ids = torch.arange(self.n_agent).unsqueeze(0).expand(batch_size, -1)
+            agent_id_embeddings = self.agent_id_emb(agent_ids)
+
+            x = obs_embeddings + agent_id_embeddings  # <--- add identity info
 
         rep = self.blocks(self.ln(x))  # 对state或obs的编码，是后续决策的主要输入之一
         v_loc = self.head(rep)  # 表示当前状态下智能体的预期回报

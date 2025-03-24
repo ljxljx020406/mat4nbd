@@ -187,6 +187,8 @@ def get_config():
     # replay buffer parameters
     parser.add_argument("--episode_length", type=int,
                         default=200, help="Max length for any episode")
+    parser.add_argument("--n_rollout_episodes", type=int,
+                        default=20, help="Max num of episodes in buffer")
     parser.add_argument("--max_buffer_size", type=int,
                         default=10000, help="Max length for buffer")
     parser.add_argument("--batch_size", type=int,
@@ -243,7 +245,7 @@ def get_config():
                         help='ppo clip parameter (default: 0.2)')
     parser.add_argument("--num_mini_batch", type=int, default=1,
                         help='number of batches for ppo (default: 1)')
-    parser.add_argument("--entropy_coef", type=float, default=0.01,
+    parser.add_argument("--entropy_coef", type=float, default=0.001,
                         help='entropy term coefficient (default: 0.01)')
     parser.add_argument("--value_loss_coef", type=float,
                         default=1, help='value loss coefficient (default: 0.5)')
