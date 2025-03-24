@@ -124,6 +124,15 @@ def episode_train(args, episode, episodes, topology, service_dict, service_to_be
     }
     runner = Runner(config)
     topology, service_dict, block_flag = runner.run(episode, episodes)
+
+    env.close()
+
+    if all_args.use_wandb:
+        run.finish()
+    else:
+        runner.writter.export_scalars_to_json(str(runner.log_dir + '/summary.json'))
+        runner.writter.close()
+
     return topology, service_dict, block_flag
 def main(args):
 
@@ -132,14 +141,15 @@ def main(args):
 
     # 定义仿真参数
     lambda_rate = 1  # 到达率
-    erlang_values = [50, 100, 150, 200, 250, 300, 350, 400]  # Erlang 目标值
+    erlang_values = [150, 200, 250, 300, 350, 400]  # Erlang 目标值
 
     # 初始化变量
     time = 0
     total_calls = 1
     service_dict = {}
     block_num = 0
-    episodes = 80  # 总被阻塞数 —— num_env_steps/episode_length = 10e6/200 = 5000
+    episode = 0
+    episodes = 1000  # 总被阻塞数 —— num_env_steps/episode_length = 10e6/200 = 5000
 
     stage_duration = episodes / len(erlang_values)  # 每个阶段的时间
 
@@ -147,9 +157,7 @@ def main(args):
     progress_bar = tqdm(total=episodes, desc="Training Progress", unit="blocks")
 
     # 开始仿真
-    while block_num < episodes:
-    # while time < simulation_time1:
-        # stage_index = min(int(time / stage_duration), len(erlang_values) - 1)
+    while episode < episodes:
         stage_index = min(int(block_num / stage_duration), len(erlang_values) - 1)
         target_erlang = erlang_values[stage_index]
         mu_rate = lambda_rate / target_erlang
@@ -158,14 +166,12 @@ def main(args):
         time_to_next_arrival = rng1.exponential(1 / lambda_rate)
         time += time_to_next_arrival
         # print(f'Time: {time:.2f}, Stage: {stage_index + 1}, Target Erlangs: {target_erlang}, New mu_rate: {mu_rate:.6f}')
-        # if time >= simulation_time1:
-        #     break
 
         # 计算呼叫持续时间（服从参数为μ的指数分布）
         call_duration = rng2.exponential(1 / mu_rate)
         call_departure_time = time + call_duration
 
-        tmp_service = new_service(topology, total_calls, 100, 700)
+        tmp_service = new_service(topology, total_calls, 100, 650)
         # print('id/src/dst/bitrate:', tmp_service.service_id, tmp_service.source_id, tmp_service.destination_id,
         #       tmp_service.bit_rate)
         total_calls += 1
@@ -180,7 +186,7 @@ def main(args):
 
         path, wavelength, info = naive_RWA(topology, tmp_service, service_dict)
         if path == None:
-            block_num += 1
+            episode += 1
             progress_bar.update(1)  # 更新进度条
             src = tmp_service.source_id
             dst = tmp_service.destination_id
@@ -189,7 +195,10 @@ def main(args):
             service_to_be_sorting = select_sorting_services(service_dict, tmp_service, time, num_agent, 0.4)
             if len(service_to_be_sorting) == 0:
                 continue
-            topology, service_dict, block_flag = episode_train(args, block_num, episodes, topology, service_dict, service_to_be_sorting, num_agent, tmp_service)
+            topology, service_dict, block_flag = episode_train(args, episode, episodes, topology, service_dict, service_to_be_sorting, num_agent, tmp_service)
+            path, wavelength, info = naive_RWA(topology, tmp_service, service_dict)
+            if wavelength == None:
+                block_num += 1
 
     progress_bar.close()  # 训练结束，关闭进度条
     print('block:', block_num/total_calls)

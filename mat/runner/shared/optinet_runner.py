@@ -23,9 +23,6 @@ class OptinetRunner(Runner):
         train_episode_rewards = [0]
         done_episodes_rewards = []
 
-        train_episode_scores = [0]
-        done_episodes_scores = []
-
         if self.use_linear_lr_decay:
             self.trainer.policy.lr_decay(episode, episodes)
 
@@ -33,23 +30,18 @@ class OptinetRunner(Runner):
             # Sample actions
             # print('step:', step)
             values, actions, action_log_probs, rnn_states, rnn_states_critic = self.collect(step)
-
-            # Obser reward and next obs
-
+            print('actions:', *[x[0] for x in actions])
             obs, share_obs, rewards, dones, infos, available_actions, blocked_allocation \
                 = self.envs.make_step(actions, step, self.episode_length)
+            print('rewards:', *[x[0] for x in rewards])
 
             dones_env = np.all(dones)
             reward_env = np.mean(rewards).flatten()
             train_episode_rewards += reward_env
 
-            score_env = [t_info[0]["score_reward"] for t_info in infos]
-            train_episode_scores += np.array(score_env)
             if dones_env:
                 done_episodes_rewards.append(train_episode_rewards)
                 train_episode_rewards = 0
-                done_episodes_scores.append(train_episode_scores)
-                train_episode_scores = 0
 
             data = obs, share_obs, rewards, dones, infos, available_actions, \
                    values, actions, action_log_probs, \
@@ -60,8 +52,9 @@ class OptinetRunner(Runner):
 
             if blocked_allocation:
                 block_flag = True
-            if dones_env:
-                break
+            # 实际部署时需要加上！
+            # if dones_env:
+            #     break
 
         # compute return and update network
         self.compute()
@@ -89,13 +82,9 @@ class OptinetRunner(Runner):
             if len(done_episodes_rewards) > 0:
                 aver_episode_rewards = np.mean(done_episodes_rewards)
                 self.writter.add_scalars("train_episode_rewards", {"aver_rewards": aver_episode_rewards}, total_num_steps)
-                done_episodes_rewards = []
 
-                aver_episode_scores = np.mean(done_episodes_scores)
-                self.writter.add_scalars("train_episode_scores", {"aver_scores": aver_episode_scores}, total_num_steps)
-                done_episodes_scores = []
-                print("some episodes done, average rewards: {}, scores: {}"
-                      .format(aver_episode_rewards, aver_episode_scores))
+                print("some episodes done, average rewards: {}"
+                      .format(aver_episode_rewards))
         return self.envs.topology, self.envs.service_dict, block_flag
             # # eval
             # if episode % self.eval_interval == 0 and self.use_eval:

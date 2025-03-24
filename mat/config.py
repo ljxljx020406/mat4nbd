@@ -186,11 +186,11 @@ def get_config():
 
     # replay buffer parameters
     parser.add_argument("--episode_length", type=int,
-                        default=10, help="Max length for any episode")
+                        default=200, help="Max length for any episode")
     parser.add_argument("--max_buffer_size", type=int,
                         default=10000, help="Max length for buffer")
     parser.add_argument("--batch_size", type=int,
-                        default=10, help="Max length for batch")
+                        default=2000, help="Max length for batch")
 
     # network parameters
     parser.add_argument("--share_policy", action='store_false',
@@ -201,7 +201,7 @@ def get_config():
                         help="Dimension of hidden layers for actor/critic networks")
     parser.add_argument("--use_stacked_frames", action='store_true',
                         default=False, help="Whether to use stacked_frames")
-    parser.add_argument("--hidden_size", type=int, default=64,
+    parser.add_argument("--hidden_size", type=int, default=256,
                         help="Dimension of hidden layers for actor/critic networks") 
     parser.add_argument("--layer_N", type=int, default=2,
                         help="Number of layers for actor/critic networks")
@@ -253,7 +253,7 @@ def get_config():
                         help='max norm of gradients (default: 0.5)')
     parser.add_argument("--use_gae", action='store_false',
                         default=True, help='use generalized advantage estimation')
-    parser.add_argument("--gamma", type=float, default=0.99,
+    parser.add_argument("--gamma", type=float, default=0,
                         help='discount factor for rewards (default: 0.99)')
     parser.add_argument("--gae_lambda", type=float, default=0.95,
                         help='gae lambda parameter (default: 0.95)')
@@ -292,9 +292,10 @@ def get_config():
 
     # add for transformer
     parser.add_argument("--encode_state", action='store_true', default=False)
-    parser.add_argument("--n_block", type=int, default=1)
-    parser.add_argument("--n_embd", type=int, default=64)
-    parser.add_argument("--n_head", type=int, default=1)
+    # 增加！
+    parser.add_argument("--n_block", type=int, default=5)
+    parser.add_argument("--n_embd", type=int, default=256)
+    parser.add_argument("--n_head", type=int, default=8)
     parser.add_argument("--dec_actor", action='store_true', default=False)
     parser.add_argument("--share_actor", action='store_true', default=False)
 

@@ -660,6 +660,122 @@ def naive_RWA(topology, service:Service, service_dict):
     # print('分配失败', reason)
     return None, None, wave_reason
 
+def check_RWA(topology, service:Service, service_dict):
+    '''
+    input: topology, service
+    output: path_node_list, wavelength j
+    only check if the service could be allocated to the topology
+    '''
+    src = service.source_id
+    dst = service.destination_id
+    bit_rate = service.bit_rate
+
+    if bit_rate < 150:
+        service.snr_requirement = 9
+    elif bit_rate < 300:
+        service.snr_requirement = 12
+    elif bit_rate < 450:
+        service.snr_requirement = 16
+    elif bit_rate < 600:
+        service.snr_requirement = 18.6
+    elif bit_rate < 750:
+        service.snr_requirement = 21.6
+    else:
+        service.snr_requirement = 24.6
+
+    for path in topology.graph['ksp'][str(src), str(dst)]:
+        path_start_time = time.time()
+        start_wavelength = rng1.randint(0, 80 - 1)
+        wave_reason = np.zeros(80)
+        for offset in range(80):
+            j = (start_wavelength + offset) % 80
+            allocation = True
+            outer_break = False
+            reason = None
+            Power = np.zeros((len(path.node_list), 80), dtype=float)
+            path_GSNR = np.zeros((len(path.node_list), 80), dtype=float)
+            # Power_after_transmission = np.zeros(80, dtype=float)
+            for i in range((len(path.node_list)-1)):
+                if outer_break:
+                    break
+                # print("i=",i)
+                u = path.node_list[i]
+                v = path.node_list[i+1]
+                # original_powers.append(topology[u][v]['wavelength_power'].copy())  # 先保存原始功率
+                # print('power:', topology[u][v]['wavelength_power'][j], type(topology[u][v]['wavelength_power'][j]))
+
+                # 检查波长是否空闲
+                if not (topology[u][v]['wavelength_power'][j] == 0 or (np.isnan(topology[u][v]['wavelength_power'][j]))):
+                    reason = 'no free wavelength'
+                    wave_reason[j] = 1
+                    # print('power:', topology[u][v]['wavelength_power'][j])
+                    allocation = False
+                    break
+                else:
+                    # 检查SNR是否满足要求
+                    # 获取链路参数
+                    distance = topology[u][v]['length']
+                    channels = 80
+                    # if i == 0:
+                    Power[i] = copy.deepcopy(topology[u][v]['wavelength_power'])
+                    Power[i][j] = service.power
+                        # print('Power[i]:', Power[i])
+                        # print("power:", Power)
+                    frequencies = np.concatenate([np.linspace(184.4e12, 190.25e12, channels // 2), np.linspace(190.75e12, 196.6e12, channels // 2)])
+                    # if i != 0:
+                    #     topology[u][v]['wavelength_power'] = Power_after_transmission
+                    # 临时添加待分配业务的功率
+                    # topology[u][v]['wavelength_power'][j] = service.power
+                    tmp = copy.deepcopy(Power[i])
+                    # tmp = copy.deepcopy(topology[u][v]['wavelength_power'])
+                    # tmp[j] = service.power
+                    tmp = np.array(tmp)
+                    # # print('tmp:', tmp)
+                    # if i != 0:
+                    #     # print('unupdate_Power[i]:', Power[i])
+                    #     Power[i] = [Power[i][j] if Power[i][j] != 0 and tmp[j] != 0 else tmp[j] for j in
+                    #                      range(len(Power[i]))]
+                    #     tmp = Power[i]
+                    #     tmp = np.array(tmp)
+                        # print('update_Power[i]:', Power[i])
+                    # original_powers.append(topology[u][v]['wavelength_power'].copy())  # 保存原始功率
+
+                    # 计算链路的GSNR
+                    Power_after_transmission, GSNR = one_link_transmission(distance, channels, tmp, frequencies)
+                    # print('power:', Power_after_transmission)
+                    # print('GSNR:', GSNR)
+                    path_GSNR[i] = GSNR
+                    # topology[u][v]['wavelength_power'] = Power_after_transmission  # 更新功率
+                    # 检查SNR是否满足要求
+
+                    #if Decimal("{:.5f}".format(GSNR[j])) < Decimal(str(snr_requirement)):
+                    if service.snr_requirement > GSNR[j]:
+                        reason = 'GSNR < snr_requirement' +'  ' + str(GSNR[j]) + ' < ' + str(service.snr_requirement)
+                        wave_reason[j] = 2
+                        allocation = False
+                        break
+                    else:
+                        # Power[i+1] = Power_after_transmission
+                        # print("power[i+1]:", Power[i+1])
+
+                        # 检查该业务会不会对其它业务有影响，如有影响，则拒绝
+                        for m in range(80):
+                            if m != j and topology[u][v]['wavelength_service'][m] != 0:
+                                tmp_service = service_dict.get(topology[u][v]['wavelength_service'][m], None)
+                                # print('tmp_service:', tmp_service.snr_requirement, tmp_service.bit_rate, tmp_service.path)
+                                # print(service_dict.keys())
+                                # print('id:', topology[u][v]['wavelength_service'][m])
+                                if tmp_service.snr_requirement >= GSNR[m]:
+                                    # print('tmp_service:', tmp_service.service_id, tmp_service.path)
+                                    allocation = False
+                                    reason = 'interference!'
+                                    wave_reason[j] = 3
+                                    outer_break = True
+                                    break
+                return path.node_list, j, []
+
+    return None, None, wave_reason
+
 def select_sorting_services(service_dict, blocked_service, current_time, num_agent, upper_utilization):
     '''
     从service_dict中选出与blocked_service.path有重合链路的service，按照重合链路数排序，重合链路数多的排在前面。

@@ -192,7 +192,7 @@ class MATTrainer:
                 # print(sample)
                 value_loss, critic_grad_norm, policy_loss, dist_entropy, actor_grad_norm, imp_weights \
                     = self.ppo_update(sample)
-
+                print('value&policy_loss:', value_loss, policy_loss)
                 train_info['value_loss'] += value_loss.item()
                 train_info['policy_loss'] += policy_loss.item()
                 train_info['dist_entropy'] += dist_entropy.item()

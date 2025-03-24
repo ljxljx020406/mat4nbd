@@ -11,7 +11,7 @@ import itertools
 
 sys.path.append(os.path.abspath('../background'))
 
-from main_functions import release_service, one_link_transmission, naive_RWA
+from main_functions import release_service, one_link_transmission, naive_RWA, check_RWA
 import numba
 from numba import jit, njit, prange
 from concurrent.futures import ThreadPoolExecutor
@@ -274,7 +274,7 @@ class MultibandOpticalNetworkEnv(gym.Env):
         current_frag = self.calculate_network_fragmentation(new_topology)
         # print('current_frag:', current_frag)
         # print(self.topology == new_topology)
-        return (origin_frag - current_frag) * 10
+        return (origin_frag - current_frag) * 100
 
     def make_step(self, actions, current_step, episode_length):
         blocked_allocation = False
@@ -302,7 +302,7 @@ class MultibandOpticalNetworkEnv(gym.Env):
 
         if current_step == episode_length:
             dones = np.ones(self.num_agents, dtype=bool)
-        path, wavelength, reason = naive_RWA(self.topology, self.blocked_service, self.service_dict)
+        path, wavelength, reason = check_RWA(self.topology, self.blocked_service, self.service_dict)
         if wavelength != None:
             blocked_allocation = True
             dones = np.ones(self.num_agents, dtype=bool)
@@ -317,6 +317,7 @@ class MultibandOpticalNetworkEnv(gym.Env):
                 u = current_service.path[j]
                 v = current_service.path[j + 1]
                 for k in range(80):
-                    if self.topology[u][v]['wavelength_service'][k] != 0:
+                    if self.topology[u][v]['wavelength_service'][k] != 0 \
+                            and self.topology[u][v]['wavelength_service'][k] != current_service.service_id:
                         available_actions[index][k] = 0
         return obs, shared_obs, rewards, dones, infos, available_actions, blocked_allocation
