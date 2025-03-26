@@ -29,10 +29,10 @@ class OptinetRunner(Runner):
         for step in range(self.episode_length):
             # Sample actions
             # print('step:', step)
-            values, actions, action_log_probs, rnn_states, rnn_states_critic = self.collect(step)
+            values, actions, action_log_probs, rnn_states, rnn_states_critic = self.collect()
             print('actions:', *[x[0] for x in actions])
             obs, share_obs, rewards, dones, infos, available_actions, blocked_allocation \
-                = self.envs.make_step(actions, step, self.episode_length)
+                = self.envs.make_step(actions)
             print('rewards:', *[x[0] for x in rewards])
 
             dones_env = np.all(dones)
@@ -58,39 +58,43 @@ class OptinetRunner(Runner):
 
         # compute return and update network
         self.compute()
-        train_infos = self.train()
 
-        # post process
-        total_num_steps = (episode + 1) * self.episode_length
-        # save model
-        if (episode % self.save_interval == 0 or episode == episodes - 1):
-            self.save(episode)
+        num_samples = min(self.buffer.step, self.buffer.max_steps)
+        if num_samples > self.all_args.batch_size:
+            train_infos = self.train()
 
-        # log information
-        if episode % self.log_interval == 0:
-            end = time.time()
-            print("\n Algo {} updates {}/{} episodes, total num timesteps {}/{}, FPS {}.\n"
-                    .format(self.algorithm_name,
-                            episode,
-                            episodes,
-                            total_num_steps,
-                            self.num_env_steps,
-                            int(total_num_steps / (end - start))))
+            # post process
+            total_num_steps = (episode + 1) * self.episode_length
+            # save model
+            if (episode % self.save_interval == 0 or episode == episodes - 1):
+                self.save(episode)
 
-            self.log_train(train_infos, total_num_steps)
+            # log information
+            if episode % self.log_interval == 0:
+                end = time.time()
+                print("\n Algo {} updates {}/{} episodes, total num timesteps {}/{}, FPS {}.\n"
+                        .format(self.algorithm_name,
+                                episode,
+                                episodes,
+                                total_num_steps,
+                                self.num_env_steps,
+                                int(total_num_steps / (end - start))))
 
-            if len(done_episodes_rewards) > 0:
-                aver_episode_rewards = np.mean(done_episodes_rewards)
-                self.writter.add_scalars("train_episode_rewards", {"aver_rewards": aver_episode_rewards}, total_num_steps)
+                self.log_train(train_infos, total_num_steps)
 
-                print("some episodes done, average rewards: {}"
-                      .format(aver_episode_rewards))
+                if len(done_episodes_rewards) > 0:
+                    aver_episode_rewards = np.mean(done_episodes_rewards)
+                    self.writter.add_scalars("train_episode_rewards", {"aver_rewards": aver_episode_rewards}, total_num_steps)
+
+                    print("some episodes done, average rewards: {}"
+                          .format(aver_episode_rewards))
         return self.envs.topology, self.envs.service_dict, block_flag
             # # eval
             # if episode % self.eval_interval == 0 and self.use_eval:
             #     self.eval(total_num_steps)
 
     def warmup(self):
+        idx = self.buffer.step % self.buffer.max_steps
         # reset env
         obs, share_obs, ava = self.envs.reset()
 
@@ -98,13 +102,14 @@ class OptinetRunner(Runner):
         if not self.use_centralized_V:
             share_obs = obs
 
-        self.buffer.share_obs[0] = share_obs.copy()
-        self.buffer.obs[0] = obs.copy()
-        self.buffer.available_actions[0] = ava.copy()
-        self.buffer.active_masks[0] = self.envs.active_masks.copy()
+        self.buffer.share_obs[idx] = share_obs.copy()
+        self.buffer.obs[idx] = obs.copy()
+        self.buffer.available_actions[idx] = ava.copy()
+        self.buffer.active_masks[idx] = self.envs.active_masks.copy()
 
     @torch.no_grad()
-    def collect(self, step):
+    def collect(self):
+        step = self.buffer.step % self.buffer.max_steps
         self.trainer.prep_rollout()
         value, action, action_log_prob, rnn_state, rnn_state_critic \
             = self.trainer.policy.get_actions(self.buffer.share_obs[step],
@@ -127,11 +132,13 @@ class OptinetRunner(Runner):
 
         dones_env = np.all(dones)
 
-        rnn_states[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents, self.recurrent_N, self.hidden_size), dtype=np.float32)
-        rnn_states_critic[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents, *self.buffer.rnn_states_critic.shape[2:]), dtype=np.float32)
+        # rnn_states[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents, self.recurrent_N, self.hidden_size), dtype=np.float32)
+        # rnn_states_critic[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents, *self.buffer.rnn_states_critic.shape[2:]), dtype=np.float32)
 
         masks = np.ones((self.num_agents, 1), dtype=np.float32)
-        masks[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents, 1), dtype=np.float32)
+        # masks[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents, 1), dtype=np.float32)
+        if dones_env:
+            masks[:] = 0.0
 
         # active_masks = np.ones((self.num_agents, 1), dtype=np.float32)
         # active_masks[dones == True] = np.zeros(((dones == True).sum(), 1), dtype=np.float32)

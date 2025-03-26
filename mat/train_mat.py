@@ -24,6 +24,7 @@ sys.path.append("../../env")
 
 from mat.config import get_config
 from mat.runner.shared.optinet_runner import OptinetRunner as Runner
+from mat.utils.shared_buffer import SharedReplayBuffer
 from envs.multiband_optical_network_env import MultibandOpticalNetworkEnv
 from background.main_functions import new_service, naive_RWA, release_service, select_sorting_services
 
@@ -39,7 +40,7 @@ def parse_args(args, parser):
 
     return all_args
 
-def episode_train(args, episode, episodes, topology, service_dict, service_to_be_sorting, num_agents, blocked_service):
+def episode_train(args, buffer, episode, episodes, topology, service_dict, service_to_be_sorting, num_agents, blocked_service):
     env = MultibandOpticalNetworkEnv(topology, service_dict, service_to_be_sorting, num_agents, blocked_service)
     # state = env.reset(topology, service_dict, service_to_be_sorting)
     parser = get_config()
@@ -120,7 +121,8 @@ def episode_train(args, episode, episodes, topology, service_dict, service_to_be
         "env": env,
         "num_agents": num_agents,
         "device": device,
-        "run_dir": run_dir
+        "run_dir": run_dir,
+        "buffer": buffer
     }
     runner = Runner(config)
     topology, service_dict, block_flag = runner.run(episode, episodes)
@@ -135,9 +137,13 @@ def episode_train(args, episode, episodes, topology, service_dict, service_to_be
 
     return topology, service_dict, block_flag
 def main(args):
-
     with open('../topology/usnet_topology_1path.h5', 'rb') as f:
         topology = pickle.load(f)
+    parser = get_config()
+    all_args = parse_args(args, parser)
+    dummy_env = MultibandOpticalNetworkEnv(topology, [], {}, num_agent, [])
+    buffer = SharedReplayBuffer(all_args, num_agent, dummy_env.observation_space[0], dummy_env.observation_space[0], dummy_env.action_space[0], all_args.env_name)
+
 
     # 定义仿真参数
     lambda_rate = 1  # 到达率
@@ -195,7 +201,7 @@ def main(args):
             service_to_be_sorting = select_sorting_services(service_dict, tmp_service, time, num_agent, 0.4)
             if len(service_to_be_sorting) == 0:
                 continue
-            topology, service_dict, block_flag = episode_train(args, episode, episodes, topology, service_dict, service_to_be_sorting, num_agent, tmp_service)
+            topology, service_dict, block_flag = episode_train(args, buffer, episode, episodes, topology, service_dict, service_to_be_sorting, num_agent, tmp_service)
             path, wavelength, info = naive_RWA(topology, tmp_service, service_dict)
             if wavelength == None:
                 block_num += 1

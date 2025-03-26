@@ -83,14 +83,16 @@ class Runner(object):
 
         # algorithm
         self.trainer = TrainAlgo(self.all_args, self.policy, self.num_agents, device=self.device)
-        
-        # buffer
-        self.buffer = SharedReplayBuffer(self.all_args,
-                                        self.num_agents,
-                                        self.envs.observation_space[0],
-                                        share_observation_space,
-                                        self.envs.action_space[0],
-                                         self.all_args.env_name)
+        if "buffer" in config:
+            self.buffer = config["buffer"]
+        else:
+            # buffer
+            self.buffer = SharedReplayBuffer(self.all_args,
+                                            self.num_agents,
+                                            self.envs.observation_space[0],
+                                            share_observation_space,
+                                            self.envs.action_space[0],
+                                             self.all_args.env_name)
 
     def run(self, episode, episodes):
         """Collect training data, perform training updates, and evaluate policy."""
@@ -114,21 +116,39 @@ class Runner(object):
     @torch.no_grad()
     def compute(self):
         """Calculate returns for the collected data."""
+        # self.trainer.prep_rollout()
+        # if self.buffer.available_actions is None:  # 连续动作空间
+        #     next_values = self.trainer.policy.get_values(np.concatenate(self.buffer.share_obs[-1]),
+        #                                                  np.concatenate(self.buffer.obs[-1]),
+        #                                                  np.concatenate(self.buffer.rnn_states_critic[-1]),
+        #                                                  np.concatenate(self.buffer.masks[-1]))
+        # else:  # 离散动作空间
+        #     next_values = self.trainer.policy.get_values(np.concatenate(self.buffer.share_obs[-1]),
+        #                                                  np.concatenate(self.buffer.obs[-1]),
+        #                                                  np.concatenate(self.buffer.rnn_states_critic[-1]),
+        #                                                  np.concatenate(self.buffer.masks[-1]),
+        #                                                  np.concatenate(self.buffer.available_actions[-1]))
+        # next_values = np.array(_t2n(next_values))
+        # self.buffer.compute_returns(next_values, self.trainer.value_normalizer)
+
         self.trainer.prep_rollout()
-        if self.buffer.available_actions is None:  # 连续动作空间
-            next_values = self.trainer.policy.get_values(np.concatenate(self.buffer.share_obs[-1]),
-                                                         np.concatenate(self.buffer.obs[-1]),
-                                                         np.concatenate(self.buffer.rnn_states_critic[-1]),
-                                                         np.concatenate(self.buffer.masks[-1]))
-        else:  # 离散动作空间
-            next_values = self.trainer.policy.get_values(np.concatenate(self.buffer.share_obs[-1]),
-                                                         np.concatenate(self.buffer.obs[-1]),
-                                                         np.concatenate(self.buffer.rnn_states_critic[-1]),
-                                                         np.concatenate(self.buffer.masks[-1]),
-                                                         np.concatenate(self.buffer.available_actions[-1]))
+        idx = self.buffer.step % self.buffer.max_steps
+        if self.buffer.available_actions is None:
+            next_values = self.trainer.policy.get_values(
+                np.concatenate(self.buffer.share_obs[idx]),
+                np.concatenate(self.buffer.obs[idx]),
+                np.concatenate(self.buffer.rnn_states_critic[idx]),
+                np.concatenate(self.buffer.masks[idx]))
+        else:
+            next_values = self.trainer.policy.get_values(
+                np.concatenate(self.buffer.share_obs[idx]),
+                np.concatenate(self.buffer.obs[idx]),
+                np.concatenate(self.buffer.rnn_states_critic[idx]),
+                np.concatenate(self.buffer.masks[idx]),
+                np.concatenate(self.buffer.available_actions[idx]))
         next_values = np.array(_t2n(next_values))
         self.buffer.compute_returns(next_values, self.trainer.value_normalizer)
-    
+
     def train(self):
         """Train policies with data in buffer. """
         self.trainer.prep_training()

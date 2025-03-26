@@ -276,7 +276,7 @@ class MultibandOpticalNetworkEnv(gym.Env):
         # print(self.topology == new_topology)
         return (origin_frag - current_frag) * 500
 
-    def make_step(self, actions, current_step, episode_length):
+    def make_step(self, actions):
         blocked_allocation = False
         rewards = np.zeros((self.num_agents, 1))
         available_actions = np.ones((self.num_agents, 80))
@@ -300,8 +300,8 @@ class MultibandOpticalNetworkEnv(gym.Env):
                 # print('not allocation!')
                 rewards[index] = -1
 
-        if current_step == episode_length:
-            dones = np.ones(self.num_agents, dtype=bool)
+        # if current_step == episode_length:
+        #     dones = np.ones(self.num_agents, dtype=bool)
         path, wavelength, reason = check_RWA(self.topology, self.blocked_service, self.service_dict)
         if wavelength != None:
             blocked_allocation = True
@@ -310,14 +310,14 @@ class MultibandOpticalNetworkEnv(gym.Env):
         obs = self.get_observation()
         shared_obs = obs
 
-        for i in self.service_ids:
-            current_service = self.service_to_be_sorting[i]
-            index = self.service_ids.index(i)
-            for j in range((len(current_service.path)-1)):
-                u = current_service.path[j]
-                v = current_service.path[j + 1]
-                for k in range(80):
-                    if self.topology[u][v]['wavelength_service'][k] != 0 \
-                            and self.topology[u][v]['wavelength_service'][k] != current_service.service_id:
-                        available_actions[index][k] = 0
+        # for i in self.service_ids:
+        #     current_service = self.service_to_be_sorting[i]
+        #     index = self.service_ids.index(i)
+        #     for j in range((len(current_service.path)-1)):
+        #         u = current_service.path[j]
+        #         v = current_service.path[j + 1]
+        #         for k in range(80):
+        #             if self.topology[u][v]['wavelength_service'][k] != 0 \
+        #                     and self.topology[u][v]['wavelength_service'][k] != current_service.service_id:
+        #                 available_actions[index][k] = 0
         return obs, shared_obs, rewards, dones, infos, available_actions, blocked_allocation
